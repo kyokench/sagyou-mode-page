@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>作業モードタイマー</title>
+  <style>
+    :root {
+      --ink:#111827; --sub:#6b7280; --bg:#f8fafc; --card:#ffffff; --line:#e5e7eb;
+      --accent:#2563eb; --accent-weak:#dbeafe; --danger:#ef4444; --ok:#059669; --shadow:0 10px 30px rgba(0,0,0,.08);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{font-family: system-ui, -apple-system, Segoe UI, Roboto, "Noto Sans JP", sans-serif; margin:0; color:var(--ink); background:var(--bg)}
+
+    .container{max-width:960px;margin:40px auto;padding:0 16px}
+    .card{background:var(--card); border:1px solid var(--line); border-radius:18px; box-shadow:var(--shadow); padding:18px}
+    h1{font-size:clamp(18px,2.4vw,26px); margin:0 0 10px}
+    p.lead{color:var(--sub); margin-top:6px}
+
+    .grid{display:grid; gap:14px; grid-template-columns:1fr;}
+    @media(min-width:760px){ .grid{ grid-template-columns: 1fr 1fr; } }
+
+    label{display:block; font-size:14px; color:var(--sub); margin-bottom:6px}
+    input[type="time"], input[type="number"], input[type="text"], select {
+      width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:12px; background:#fff; font-size:15px;
+    }
+    .row{display:flex; flex-wrap:wrap; gap:10px; align-items:center}
+    .hint{font-size:12px; color:var(--sub)}
+
+    button{border:0; border-radius:12px; padding:10px 14px; font-size:14px; cursor:pointer; background:var(--accent); color:#fff}
+    button.secondary{background:#fff; color:var(--ink); border:1px solid var(--line)}
+    button.ghost{background:transparent; color:var(--sub)}
+    button.danger{background:var(--danger)}
+    button.ok{background:var(--ok)}
+    button:disabled{opacity:.5; cursor:not-allowed}
+
+    /* 右下バッジ */
+    .work-badge{position:fixed; right:18px; bottom:18px; background:#0f172a; color:#fff; border-radius:999px; padding:10px 14px; display:flex; align-items:center; gap:10px; box-shadow:0 10px 30px rgba(2,6,23,.35); z-index:99; transform:translateY(20px); opacity:0; pointer-events:none; transition:.25s}
+    .work-badge.active{transform:translateY(0); opacity:1; pointer-events:auto}
+    .dot{width:10px; height:10px; border-radius:50%; background:#22c55e; box-shadow:0 0 0 6px rgba(34,197,94,.12)}
+    .badge-text{font-weight:600}
+    .sub{font-weight:500; opacity:.85}
+    .sep{opacity:.35}
+
+    .badge-actions{display:flex; gap:6px; margin-left:8px}
+    .badge-actions button{background:#1f2937; color:#fff; border:1px solid rgba(255,255,255,.12); padding:6px 10px; border-radius:10px}
+
+    /* トースト */
+    .toast{position:fixed; left:50%; bottom:26px; transform:translate(-50%, 20px); background:#111827; color:#fff; padding:14px 16px; border-radius:12px; box-shadow:var(--shadow); opacity:0; pointer-events:none; transition:.35s; z-index:100}
+    .toast.show{opacity:1; transform:translate(-50%, 0)}
+
+    /* モーダル */
+    .modal{position:fixed; inset:0; background:rgba(0,0,0,.45); display:grid; place-items:center; opacity:0; pointer-events:none; transition:.25s; z-index:100}
+    .modal.show{opacity:1; pointer-events:auto}
+    .modal .panel{background:#fff; border-radius:16px; padding:22px; width:min(520px, calc(100% - 32px)); box-shadow:var(--shadow)}
+    .panel h2{margin:0 0 6px}
+    .panel p{color:var(--sub)}
+
+    .pill{display:inline-flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--line); border-radius:999px; background:#fff}
+    .checkbox{display:flex; gap:10px; align-items:center}
+
+    .section-title{font-weight:700; margin:6px 0 2px; font-size:14px; color:#0f172a}
+
+    .kbd{font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; background:#f1f5f9; border:1px solid #e2e8f0; padding:2px 6px; border-radius:6px; font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>作業モードタイマー</h1>
+      <p class="lead">「◯時まで集中する」をワンクリックで。右下に <strong>作業モード（〜時まで）</strong> のバッジが出て、時間になったら通知します。</p>
+
+      <div class="grid" role="group" aria-label="入力フォーム">
+        <div>
+          <label for="endTime">終了時刻</label>
+          <input id="endTime" type="time" />
+          <div class="hint">例: 22:30 まで集中</div>
+        </div>
+        <div>
+          <label for="minutes">分数で指定</label>
+          <input id="minutes" type="number" min="1" step="1" placeholder="25" />
+          <div class="hint">今から ◯ 分後に終了（例: 25）</div>
+        </div>
+        <div>
+          <label for="labelText">メモ（任意）</label>
+          <input id="labelText" type="text" placeholder="ブログ執筆 / バグ修正 など" />
+        </div>
+        <div>
+          <div class="section-title">オプション</div>
+          <div class="row">
+            <label class="checkbox"><input type="checkbox" id="opt_sound" /> 音で通知</label>
+            <label class="checkbox"><input type="checkbox" id="opt_notify" /> デスクトップ通知</label>
+            <label class="checkbox"><input type="checkbox" id="opt_autostart" /> ページ再読み込み後も継続</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:12px">
+        <button id="startBtn" class="ok">作業モード開始</button>
+        <button id="pauseBtn" class="secondary" disabled>一時停止</button>
+        <button id="stopBtn" class="danger" disabled>終了</button>
+        <button id="add5" class="secondary" disabled>+5分</button>
+        <button id="add10" class="secondary" disabled>+10分</button>
+        <span class="hint">ショートカット: <span class="kbd">S</span> 開始 / <span class="kbd">P</span> 一時停止 / <span class="kbd">E</span> 終了</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右下バッジ -->
+  <div id="badge" class="work-badge" role="status" aria-live="polite" aria-atomic="true">
+    <span class="dot" id="dot"></span>
+    <div>
+      <div class="badge-text" id="badgeMain">作業モード</div>
+      <div class="sub"><span id="badgeUntil">—</span><span class="sep">・</span><span id="badgeRemain">—:—</span></div>
+    </div>
+    <div class="badge-actions">
+      <button id="bAdd5" title="5分延長">+5</button>
+      <button id="bPause" title="一時停止">II</button>
+      <button id="bStop" title="終了">×</button>
+    </div>
+  </div>
+
+  <!-- トースト -->
+  <div id="toast" class="toast" role="alert" aria-live="assertive">時間になりました。おつかれさま！</div>
+
+  <!-- モーダル（時間到達） -->
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="panel">
+      <h2>時間になりました ⏰</h2>
+      <p id="modalTask" class="lead">おつかれさまです。深呼吸して切り替えましょう。</p>
+      <div class="row" style="margin-top:10px">
+        <button id="extend5" class="secondary">+5分 延長</button>
+        <button id="extend10" class="secondary">+10分 延長</button>
+        <button id="closeModal" class="ok">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  const $ = (s, p=document) => p.querySelector(s);
+  const $$ = (s, p=document) => Array.from(p.querySelectorAll(s));
+
+  const ids = [
+    'endTime','minutes','labelText','opt_sound','opt_notify','opt_autostart',
+    'startBtn','pauseBtn','stopBtn','add5','add10',
+    'badge','badgeMain','badgeUntil','badgeRemain','dot','bAdd5','bPause','bStop',
+    'toast','modal','extend5','extend10','closeModal','modalTask'
+  ];
+  const el = Object.fromEntries(ids.map(id=>[id, $('#'+id)]));
+
+  const STORAGE_KEY = 'workmode.v1';
+  let timer = null; // setInterval id
+  let state = {
+    running:false,
+    paused:false,
+    endAt:null, // epoch ms
+    label:'',
+    options:{ sound:false, notify:false, persist:false }
+  };
+
+  // ===== Helpers =====
+  const pad = n => String(n).padStart(2,'0');
+  function fmtClock(ms){
+    const t = Math.max(0, ms);
+    const sec = Math.floor(t/1000);
+    const m = Math.floor(sec/60);
+    const s = sec%60;
+    return `${pad(m)}:${pad(s)}`;
+  }
+  function fmtUntil(ts){
+    if(!ts) return '—';
+    const d = new Date(ts);
+    return `${pad(d.getHours())}:${pad(d.getMinutes())} まで`;
+  }
+  function save(){ if(state.options.persist){ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } }
+  function load(){
+    try{ const raw = localStorage.getItem(STORAGE_KEY); if(!raw) return; const data = JSON.parse(raw);
+      if(data && data.endAt && Date.now() < data.endAt + 24*60*60*1000){ state = Object.assign(state, data); }
+    }catch(_){/*ignore*/}
+  }
+
+  function requestNotifyPermission(){
+    if(!('Notification' in window)) return;
+    if(Notification.permission === 'default') Notification.requestPermission();
+  }
+
+  // ===== UI Updates =====
+  function render(){
+    // badge
+    if(state.running){ el.badge.classList.add('active'); } else { el.badge.classList.remove('active'); }
+    el.badgeMain.textContent = state.label ? `作業モード：${state.label}` : '作業モード';
+    el.badgeUntil.textContent = fmtUntil(state.endAt);
+
+    const remain = Math.max(0, (state.endAt||0) - Date.now());
+    el.badgeRemain.textContent = fmtClock(remain);
+    el.dot.style.background = state.paused ? '#f59e0b' : '#22c55e';
+
+    // buttons
+    el.startBtn.disabled = state.running;
+    el.pauseBtn.disabled = !state.running;
+    el.stopBtn.disabled = !state.running;
+    el.add5.disabled = !state.running;
+    el.add10.disabled = !state.running;
+
+    el.bPause.textContent = state.paused ? '▶' : 'II';
+  }
+
+  function tick(){
+    render();
+    if(!state.running || state.paused) return;
+    const remain = (state.endAt||0) - Date.now();
+    if(remain <= 0){
+      onTimeUp();
+    }
+  }
+
+  function startTimer(){ if(timer) clearInterval(timer); timer = setInterval(tick, 250); }
+  function stopTimer(){ if(timer) clearInterval(timer); timer = null; }
+
+  function toast(msg){
+    el.toast.textContent = msg; el.toast.classList.add('show');
+    setTimeout(()=> el.toast.classList.remove('show'), 3000);
+  }
+
+  function beep(){
+    try{
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      const o = ac.createOscillator(); const g = ac.createGain(); o.connect(g); g.connect(ac.destination);
+      o.type='sine'; o.frequency.value = 880; g.gain.value=.0001; o.start();
+      const now = ac.currentTime; g.gain.setValueAtTime(.0001, now);
+      g.gain.exponentialRampToValueAtTime(.2, now+.02);
+      g.gain.exponentialRampToValueAtTime(.0001, now+.45);
+      o.stop(now+.5);
+    }catch(_){/* ignore */}
+  }
+
+  function notify(msg){
+    if(!state.options.notify || !('Notification' in window)) return;
+    if(Notification.permission === 'granted') new Notification(msg);
+  }
+
+  function onTimeUp(){
+    state.running = false; state.paused = false;
+    render(); stopTimer(); save();
+    const msg = '時間になりました。おつかれさま！';
+    toast(msg); notify(msg); if(state.options.sound) beep();
+    el.modalTask.textContent = state.label ? `「${state.label}」を終了しますか？延長もできます。` : '延長する場合はボタンを押してください。';
+    el.modal.classList.add('show'); el.modal.setAttribute('aria-hidden','false');
+  }
+
+  function begin(endAt){
+    state.endAt = endAt; state.running = true; state.paused = false; state.label = el.labelText.value.trim();
+    state.options.sound = el.opt_sound.checked;
+    state.options.notify = el.opt_notify.checked;
+    state.options.persist = el.opt_autostart.checked;
+    if(state.options.notify) requestNotifyPermission();
+    render(); startTimer(); save(); toast('作業モードを開始しました');
+  }
+
+  function addMinutes(min){ if(!state.endAt) return; state.endAt += min*60*1000; render(); save(); toast(`${min}分 延長しました`); }
+
+  function pause(){ state.paused = !state.paused; render(); save(); toast(state.paused ? '一時停止しました' : '再開しました'); }
+  function stop(){ state.running=false; state.paused=false; render(); stopTimer(); save(); toast('終了しました'); }
+
+  // ===== wire up =====
+  el.startBtn.addEventListener('click', ()=>{
+    const now = new Date();
+    let endAt = null;
+    const mVal = el.minutes.valueAsNumber; // minutes
+    if(mVal && mVal>0){ endAt = Date.now() + mVal*60*1000; }
+    else if(el.endTime.value){
+      const [hh,mm] = el.endTime.value.split(':').map(Number);
+      const end = new Date(now); end.setHours(hh, mm, 0, 0);
+      if(end < now) end.setDate(end.getDate()+1); // 翌日
+      endAt = end.getTime();
+    }
+    if(!endAt){ toast('終了時刻 か 分数 のどちらかを入力してください'); return; }
+    begin(endAt);
+  });
+  el.pauseBtn.addEventListener('click', pause);
+  el.stopBtn.addEventListener('click', stop);
+  el.add5.addEventListener('click', ()=>addMinutes(5));
+  el.add10.addEventListener('click', ()=>addMinutes(10));
+
+  el.bAdd5.addEventListener('click', ()=>addMinutes(5));
+  el.bPause.addEventListener('click', pause);
+  el.bStop.addEventListener('click', stop);
+
+  el.extend5.addEventListener('click', ()=>{ addMinutes(5); el.modal.classList.remove('show'); });
+  el.extend10.addEventListener('click', ()=>{ addMinutes(10); el.modal.classList.remove('show'); });
+  el.closeModal.addEventListener('click', ()=> el.modal.classList.remove('show'));
+
+  // keyboard shortcuts
+  document.addEventListener('keydown', (e)=>{
+    if(['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
+    if(e.key.toLowerCase()==='s'){ el.startBtn.click(); }
+    if(e.key.toLowerCase()==='p'){ el.pauseBtn.click(); }
+    if(e.key.toLowerCase()==='e'){ el.stopBtn.click(); }
+  });
+
+  // Restore
+  load();
+  if(state.options.persist && state.running && state.endAt && Date.now() < state.endAt){
+    render(); startTimer(); toast('前回の作業モードを復元しました');
+  } else { state.running=false; state.paused=false; render(); }
+})();
+</script>
+</body>
+</html>
